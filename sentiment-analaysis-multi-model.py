@@ -1,6 +1,5 @@
 import streamlit as st
 import numpy as np
-import sounddevice as sd
 import librosa
 import joblib
 from tensorflow.keras.models import load_model
@@ -9,8 +8,6 @@ import torch
 from transformers import BertTokenizer, BertModel
 import re
 import speech_recognition as sr
-import time
-import scipy.io.wavfile as wav
 
 # Yüklenecek model ve yardımcı araçların yolları
 SENTIMENT_MODEL_PATH = 'mlp_model.pkl'
@@ -22,7 +19,6 @@ TEMP_AUDIO_PATH = 'temp.wav'
 
 # Mikrofon özellikleri
 SAMPLE_RATE = 44100  # Örnekleme oranı (Hz)
-DURATION = 5  # Kayıt süresi (saniye)
 
 # BERT Tokenizer ve Modeli Yükle
 tokenizer = BertTokenizer.from_pretrained('dbmdz/bert-base-turkish-cased')
@@ -84,23 +80,9 @@ def temizle_metin(metin, stop_words):
     metin = metin.replace("''", '"').replace("'", '"')
     metin = re.sub(r'[0-9.,!?]', '', metin)
     metin = re.sub(r'[^a-zA-ZçğıöşüÇĞİÖŞÜ\s]', '', metin)
-    metin = ' '.join([kelime for kelime in metin.split() if len(kelime) >= 3])
+    metin = ' '.join([kelime için kelime in metin.split() if len(kelime) >= 3])
     temiz_kelimeler = [kelime for kelime in metin.split() if kelime not in stop_words]
     return ' '.join(temiz_kelimeler)
-
-def anlamsiz_kelime_tespit_et(metin, min_kelime_uzunlugu=4):
-    if not isinstance(metin, str):
-        return ''
-    kelimeler = metin.split()
-    temiz_kelimeler = [kelime for kelime in kelimeler if len(kelime) >= min_kelime_uzunlugu]
-    return ' '.join(temiz_kelimeler)
-
-# Ses kaydını al ve dosyaya yaz
-def record_audio(duration=5):
-    st.write("Ses dinleniyor...")
-    audio_data = sd.rec(int(SAMPLE_RATE * duration), samplerate=SAMPLE_RATE, channels=1, dtype='float32')
-    sd.wait()
-    wav.write(TEMP_AUDIO_PATH, SAMPLE_RATE, (audio_data * 32767).astype(np.int16))
 
 # Ses kaydını hem ses modelinden hem metin modelinden geçir
 def process_audio():
@@ -121,7 +103,6 @@ def process_audio():
     if text:
         # Metin modelinden tahmin yap
         cleaned_text = temizle_metin(text, stop_words)
-        cleaned_text = anlamsiz_kelime_tespit_et(cleaned_text)
         text_vector = metni_vektore_cevir(cleaned_text, tokenizer, bert_model)
         text_vector = text_vector.reshape(1, -1)
         text_prediction = mlp_model.predict(text_vector)
@@ -148,14 +129,30 @@ def get_final_prediction(audio_predictions, text_prediction):
 
 # Streamlit arayüzü
 st.title("Ses Tabanlı Duygu Tanıma")
-st.write("5 saniyelik bir ses kaydedin ve duygu tahminini görün.")
+st.write("Bir ses dosyası yükleyin ya da mikrofon ile ses kaydedin ve duygu tahminini görün.")
 
-if st.button("Kaydı Başlat"):
-    record_audio(duration=DURATION)
+uploaded_file = st.file_uploader("Bir ses dosyası yükleyin", type=["wav"])
+if uploaded_file is not None:
+    with open(TEMP_AUDIO_PATH, "wb") as f:
+        f.write(uploaded_file.getbuffer())
     audio_predictions, text_prediction = process_audio()
-    
     final_prediction = get_final_prediction(audio_predictions, text_prediction)
+    st.write(f"Tahmin: {final_prediction}")
+    st.write(f"Ses Modeli Tahminleri: {audio_predictions}")
+    if text_prediction is not None:
+        st.write(f"Metin Modeli Tahmini: {text_prediction}")
+
+# Ses kaydını başlatmak için bir buton
+if st.button("Mikrofonla Ses Kaydı Yap"):
+    recognizer = sr.Recognizer()
+    with sr.Microphone(sample_rate=SAMPLE_RATE) as source:
+        st.write("Ses kaydediliyor...")
+        audio = recognizer.listen(source, phrase_time_limit=5)
+        with open(TEMP_AUDIO_PATH, "wb") as f:
+            f.write(audio.get_wav_data())
     
+    audio_predictions, text_prediction = process_audio()
+    final_prediction = get_final_prediction(audio_predictions, text_prediction)
     st.write(f"Tahmin: {final_prediction}")
     st.write(f"Ses Modeli Tahminleri: {audio_predictions}")
     if text_prediction is not None:
