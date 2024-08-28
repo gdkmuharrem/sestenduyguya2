@@ -1,3 +1,4 @@
+import streamlit as st
 import numpy as np
 import sounddevice as sd
 import librosa
@@ -96,7 +97,7 @@ def anlamsiz_kelime_tespit_et(metin, min_kelime_uzunlugu=4):
 
 # Ses kaydını al ve dosyaya yaz
 def record_audio(duration=5):
-    print("Ses dinleniyor...")
+    st.write("Ses dinleniyor...")
     audio_data = sd.rec(int(SAMPLE_RATE * duration), samplerate=SAMPLE_RATE, channels=1, dtype='float32')
     sd.wait()
     wav.write(TEMP_AUDIO_PATH, SAMPLE_RATE, (audio_data * 32767).astype(np.int16))
@@ -145,13 +146,17 @@ def get_final_prediction(audio_predictions, text_prediction):
     
     return final_prediction
 
-# Ana döngü
-try:
+# Streamlit arayüzü
+st.title("Ses Tabanlı Duygu Tanıma")
+st.write("5 saniyelik bir ses kaydedin ve duygu tahminini görün.")
+
+if st.button("Kaydı Başlat"):
     record_audio(duration=DURATION)
     audio_predictions, text_prediction = process_audio()
     
     final_prediction = get_final_prediction(audio_predictions, text_prediction)
-    print(f"\nTahmin: {final_prediction}")
-
-except KeyboardInterrupt:
-    print("Test sonlandırıldı.")
+    
+    st.write(f"Tahmin: {final_prediction}")
+    st.write(f"Ses Modeli Tahminleri: {audio_predictions}")
+    if text_prediction is not None:
+        st.write(f"Metin Modeli Tahmini: {text_prediction}")
