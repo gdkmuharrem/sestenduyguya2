@@ -1,5 +1,4 @@
 import numpy as np
-import sounddevice as sd
 import librosa
 import joblib
 from tensorflow.keras.models import load_model
@@ -8,7 +7,6 @@ import torch
 from transformers import BertTokenizer, BertModel
 import re
 import speech_recognition as sr
-import scipy.io.wavfile as wav
 import streamlit as st
 
 # Yüklenecek model ve yardımcı araçların yolları
@@ -17,11 +15,6 @@ AUDIO_MODEL_PATH = 'model10.h5'
 ENCODER_PATH = 'encoder.pkl'
 SCALER_PATH = 'scaler.pkl'
 STOP_WORDS_PATH = 'stop.txt'
-TEMP_AUDIO_PATH = 'temp.wav'
-
-# Mikrofon özellikleri
-SAMPLE_RATE = 44100  # Örnekleme oranı (Hz)
-DURATION = 5  # Kayıt süresi (saniye)
 
 # BERT Tokenizer ve Modeli Yükle
 tokenizer = BertTokenizer.from_pretrained('dbmdz/bert-base-turkish-cased')
@@ -57,9 +50,8 @@ def extract_features_from_audio(data, sample_rate):
     result = np.hstack((result, mel))
     return result
 
-def predict_emotion_from_audio(file_path):
-    audio, _ = librosa.load(file_path, sr=SAMPLE_RATE)
-    features = extract_features_from_audio(audio, SAMPLE_RATE)
+def predict_emotion_from_audio(data, sample_rate):
+    features = extract_features_from_audio(data, sample_rate)
     features = scaler.transform([features])
     features = np.expand_dims(features, axis=2)
     predictions = audio_model.predict(features)
@@ -94,24 +86,18 @@ def anlamsiz_kelime_tespit_et(metin, min_kelime_uzunlugu=4):
     temiz_kelimeler = [kelime for kelime in kelimeler if len(kelime) >= min_kelime_uzunlugu]
     return ' '.join(temiz_kelimeler)
 
-# Ses kaydını al ve dosyaya yaz
-def record_audio(duration=5):
-    st.write("Ses dinleniyor...")
-    audio_data = sd.rec(int(SAMPLE_RATE * duration), samplerate=SAMPLE_RATE, channels=1, dtype='float32')
-    sd.wait()
-    wav.write(TEMP_AUDIO_PATH, SAMPLE_RATE, (audio_data * 32767).astype(np.int16))
-
 # Ses kaydını hem ses modelinden hem metin modelinden geçir
-def process_audio():
+def process_audio(audio_file):
     # Ses modelinden tahmin yap
-    audio_predictions = predict_emotion_from_audio(TEMP_AUDIO_PATH)
+    audio, sample_rate = librosa.load(audio_file, sr=None)
+    audio_predictions = predict_emotion_from_audio(audio, sample_rate)
     
     # Metne dönüştürme
     recognizer = sr.Recognizer()
-    with sr.AudioFile(TEMP_AUDIO_PATH) as source:
-        audio = recognizer.record(source)
+    with sr.AudioFile(audio_file) as source:
+        audio_data = recognizer.record(source)
     try:
-        text = recognizer.recognize_google(audio, language='tr-TR')
+        text = recognizer.recognize_google(audio_data, language='tr-TR')
     except sr.UnknownValueError:
         text = None
     except sr.RequestError:
@@ -150,11 +136,12 @@ def get_final_prediction(audio_predictions, text_prediction, text_weight=0.7, au
 
 # Streamlit arayüzü
 st.title("Duygu Analizi ve Ses Tanıma")
-st.write("5 saniye boyunca ses kaydedilecek. Lütfen konuşmaya başlayın.")
+st.write("Bir ses dosyası yükleyin ve analiz edin.")
 
-if st.button("Kaydı Başlat"):
-    record_audio(duration=DURATION)
-    audio_predictions, text_prediction = process_audio()
+audio_file = st.file_uploader("Ses Dosyasını Yükleyin", type=["wav"])
+
+if audio_file is not None:
+    audio_predictions, text_prediction = process_audio(audio_file)
     
     final_prediction = get_final_prediction(audio_predictions, text_prediction)
     st.write(f"\nTahmin: {final_prediction}")
