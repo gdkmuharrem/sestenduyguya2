@@ -7,3 +7,4 @@ transformers
 librosa
 speechrecognition
 streamlit
+scikit-learn
