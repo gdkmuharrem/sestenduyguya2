@@ -86,6 +86,17 @@ def anlamsiz_kelime_tespit_et(metin, min_kelime_uzunlugu=4):
     temiz_kelimeler = [kelime for kelime in kelimeler if len(kelime) >= min_kelime_uzunlugu]
     return ' '.join(temiz_kelimeler)
 
+# Ses modelinin etiketlerini metin modelinin etiketlerine dönüştürme
+def convert_labels(audio_labels):
+    label_conversion = {
+        'normal': 'normal',
+        'fear': 'normal',
+        'angry': 'angry'
+    }
+    
+    converted_labels = {label_conversion.get(label, label): prob for label, prob in audio_labels.items()}
+    return converted_labels
+
 # Ses kaydını hem ses modelinden hem metin modelinden geçir
 def process_audio(audio_file):
     # Streamlit'in yüklediği dosyayı geçici bir dosya olarak kaydetme
@@ -96,6 +107,7 @@ def process_audio(audio_file):
     # Ses modelinden tahmin yap
     audio, sample_rate = librosa.load(temp_audio_path, sr=None)
     audio_predictions = predict_emotion_from_audio(audio, sample_rate)
+    audio_predictions = convert_labels(audio_predictions)  # Etiketleri dönüştür
 
     # Metne dönüştürme
     recognizer = sr.Recognizer()
@@ -125,8 +137,12 @@ def get_final_prediction(audio_predictions, text_prediction, text_weight=0.7, au
     if text_prediction is not None:
         # Nihai tahmini hesaplama
         final_prediction = {}
-        for label, audio_prob in audio_predictions.items():
-            final_prediction[label] = (text_prediction[label] * text_weight) + (audio_prob * audio_weight)
+        for label in audio_predictions.keys():
+            if label in text_prediction:
+                final_prediction[label] = (text_prediction[label] * text_weight) + (audio_predictions[label] * audio_weight)
+            else:
+                final_prediction[label] = audio_predictions[label] * audio_weight
+        
         final_prediction = max(final_prediction, key=final_prediction.get)
     else:
         final_prediction = max(audio_predictions, key=audio_predictions.get)
