@@ -88,13 +88,18 @@ def anlamsiz_kelime_tespit_et(metin, min_kelime_uzunlugu=4):
 
 # Ses kaydını hem ses modelinden hem metin modelinden geçir
 def process_audio(audio_file):
+    # Streamlit'in yüklediği dosyayı geçici bir dosya olarak kaydetme
+    temp_audio_path = "temp_audio.wav"
+    with open(temp_audio_path, "wb") as f:
+        f.write(audio_file.getbuffer())
+
     # Ses modelinden tahmin yap
-    audio, sample_rate = librosa.load(audio_file, sr=None)
+    audio, sample_rate = librosa.load(temp_audio_path, sr=None)
     audio_predictions = predict_emotion_from_audio(audio, sample_rate)
-    
+
     # Metne dönüştürme
     recognizer = sr.Recognizer()
-    with sr.AudioFile(audio_file) as source:
+    with sr.AudioFile(temp_audio_path) as source:
         audio_data = recognizer.record(source)
     try:
         text = recognizer.recognize_google(audio_data, language='tr-TR')
